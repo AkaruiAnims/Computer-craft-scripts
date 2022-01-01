@@ -3,6 +3,7 @@ local bankOS = "hpkE2Avv"
 local startup = "eess1s8h"
 local update = "DbiwrWuL"
 local turtleOS = "eYvv41iD"
+local leaderBoard = "X6TtBbqw"
 local label = getComputerLabel()
 
 function dirLocation()
