@@ -7,9 +7,37 @@ local db = peripheral.wrap("right")
 local chat = peripheral.wrap("top")
 local detector = peripheral.wrap("bottom")
 local hour = 0
+local globalMessage = "nothing"
+local messageType = "empty"
 
 if db.getDatabaseName() == nil and db.isDiskInserted() then 
     db.setDatabaseName("activityBoardDB")
+end
+
+function tick()
+    os.sleep(1)
+end
+
+function rednetmessage()
+    while true do
+        local event, sender, message, protocol = os.pullEvent("rednet_message")
+        if event == "rednet_message" then
+             globalMessage = message
+             messageType = "rednet"
+             return "done"
+        end
+    end
+end
+
+function chatmessage()
+    while true do
+    local event, username, message = os.pullEvent("chat")
+    if event == "chat" then
+             globalMessage = message
+             messageType = "chat"
+             return "done"
+        end
+    end
 end
 
 function incrementScore(num) -- adds an extra minute to the online players to the database
@@ -28,11 +56,12 @@ end
 function addPlayer(player) -- makes the table if a player is not registered in the database and adds the player
     local largestID = db.executeSQL("SELECT MAX(ID) AS id FROM playerScore")
     local largestIDNum = incrementScore(largestID.data[1]["id"])
-    db.executeSQL("INSERT INTO playerScore (ID,Players, Score) VALUES ("..largestIDNum..","..player..", 0)")
+    db.executeSQL("INSERT INTO playerScore (ID,Players, Score) VALUES ("..largestIDNum..",'"..player.."', 1)")
 end
 
 function getPlayers() -- gets the player data from the database
-    return db.executeSQL("SELECT * from playerScore")
+    local players = db.executeSQL("SELECT * from playerScore")
+    return players
 end
 
 function getScore() -- gets the latest score in order
@@ -53,6 +82,7 @@ function updateScore() --Update's the score board
     local dbPlayersCount = 0
     local newdbPlayersCount = 0
     local dtctrPlayerCount = 0
+    local inDB = false
 
     for index, value in ipairs(dbPlayers.data) do -- counts the lenght of the table
         dbPlayersCount = dbPlayersCount + 1
@@ -62,17 +92,25 @@ function updateScore() --Update's the score board
         dtctrPlayerCount = dtctrPlayerCount + 1
     end
 
-    if dbPlayersCount < dtctrPlayerCount then -- adds a player if a new one logged on
-        for i = 1, dtctrPlayerCount , 1 do
-            local player = db.executeSQL("SELECT players FROM playerScore WHERE players = '"..dtctrPlayer[i].."'")
-            if not(dtctrPlayer[i] == player.data[i]["players"]) then
-                addPlayer(dtctrPlayer[i])
+    for i = 1, dtctrPlayerCount , 1 do -- adds a player if a new one logged on
+        for x = 1, dbPlayersCount, 1 do
+            if dbPlayers.data[x]["players"] == dtctrPlayer[i] then
+                inDB = true
             end
         end
+            if inDB == false then
+                print("new player: "..dtctrPlayer[i])
+                addPlayer(dtctrPlayer[i])
+            end
+            inDB = false
     end
 
     for i = 1, dbPlayersCount , 1 do -- increments score
-        dbPlayers.data[i]["score"] = incrementScore(dbPlayers.data[i]["score"])
+        for x = 1, dtctrPlayerCount, 1 do
+            if dbPlayers.data[i]["players"] == dtctrPlayer[x] then 
+                dbPlayers.data[i]["score"] = incrementScore(dbPlayers.data[i]["score"])
+            end
+        end
     end
 
     savePlayerScore(dbPlayersCount, dbPlayers) -- save the player scores
@@ -110,12 +148,11 @@ function boardEvent(message) -- Waits for event then prints text to board
 end
 
 while true do
-    local event, sender, message, protocol = os.pullEvent("rednet_message")
 
-    if event and not(message == "updateLeaderBoard" ) then
-        boardEvent(message)
-    elseif message == "updateLeaderBoard" then
+    if parallel.waitForAny(chatmessage,rednetmessage) and not(globalMessage == "updateLeaderBoard" ) then
+        boardEvent(globalMessage)
+    elseif globalMessage == "updateLeaderBoard" and messageType == "rednet" then
         updateScore()
     end
-
+    tick()
 end
